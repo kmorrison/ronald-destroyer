@@ -106,7 +106,7 @@ func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.T
 
 func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[time.Time][]*Message {
 	var messages []*Message
-	db.Debug().Joins(
+	db.Joins(
 		"JOIN authors ON authors.id = messages.author_id",
 	).Joins(
 		"JOIN channels ON channels.id = messages.channel_id",
