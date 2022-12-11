@@ -2,6 +2,7 @@ package ronnyd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/driver/postgres"
@@ -24,12 +25,13 @@ type Channel struct {
 type Message struct {
 	gorm.Model
 	Content          string
-	MessageTimestamp string
+	MessageTimestamp time.Time
 	DiscordId        string
 	ChannelID        uint
 	Channel          Channel
 	AuthorID         uint
 	Author           Author
+	ReplayedAt       time.Time
 }
 
 func ConnectToDB() *gorm.DB {
@@ -97,7 +99,7 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 	}
 	newMessage := &Message{
 		Content:          msg.Content,
-		MessageTimestamp: msg.Timestamp.String(),
+		MessageTimestamp: msg.Timestamp,
 		DiscordId:        msg.ID,
 		ChannelID:        channel.ID,
 		AuthorID:         author.ID,

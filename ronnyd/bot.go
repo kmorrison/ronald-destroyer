@@ -6,8 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 const INDEX_COMMAND = "index!"
@@ -84,5 +87,67 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	if IsIndexCommand(m.Message) {
 		ScrapeChannelForMessages(s, m.ChannelID, 200, m.ID)
+	}
+}
+
+func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, authorID uint) bool {
+
+	var inBetweenMessage Message
+	db.First(
+		&inBetweenMessage,
+		"author_id != ? AND message_timestamp > ? AND message_timestamp < ?",
+		authorID,
+		startingTime,
+		endingTime,
+	)
+
+	return inBetweenMessage.ID != 0
+}
+
+func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[time.Time][]*Message {
+	var messages []*Message
+	db.Debug().Joins(
+		"JOIN authors ON authors.id = messages.author_id",
+	).Joins(
+		"JOIN channels ON channels.id = messages.channel_id",
+	).Where(
+		"messages.replayed_at = ?", time.Time{},
+	).Where("authors.discord_id = ?", authorID).Where("channels.discord_id = ?", channelID).Order("message_timestamp").Find(&messages)
+
+	if len(messages) == 0 {
+		return nil
+	}
+
+	var messageSessions map[time.Time][]*Message
+	var startingTime time.Time
+	messageSessions = make(map[time.Time][]*Message)
+	for _, message := range messages {
+		// decide if we should group into a new session
+		if message.MessageTimestamp.Sub(startingTime) > 5*time.Minute {
+			startingTime = message.MessageTimestamp
+			messageSessions[startingTime] = make([]*Message, 0)
+		} else if thereExistsMessageFromSomeoneElseInBetween(db, startingTime, message.MessageTimestamp, message.AuthorID) {
+			startingTime = message.MessageTimestamp
+			messageSessions[startingTime] = make([]*Message, 0)
+		}
+
+		messageSessions[startingTime] = append(messageSessions[startingTime], message)
+	}
+	return messageSessions
+}
+
+var mu sync.Mutex
+
+func SendMessagePlayback(authorID string, channelID string) {
+	db := ConnectToDB()
+
+	mu.Lock()
+	defer mu.Unlock()
+	messageMap := GetMessagesForPlayback(db, authorID, channelID)
+	for t, messages := range messageMap {
+		for i, message := range messages {
+			fmt.Println(i, t, message.MessageTimestamp, message.Author.Name, message.Content)
+		}
+		fmt.Println("-----")
 	}
 }
