@@ -6,8 +6,8 @@ import (
 
 func main() {
 	config := ronnyd.ReadConfig()
-	ronnyd.SendMessagePlayback(
-		config["admin-discord-id"].(string),
+	ronnyd.RunPlayback(
 		"982055964230422608",
+		config["admin-discord-id"].(string),
 	)
 }

@@ -11,22 +11,22 @@ import (
 
 type Author struct {
 	gorm.Model
-	DiscordID     string
+	DiscordID     string `gorm:"uniqueIndex"`
 	Name          string
 	Discriminator string
 }
 
 type Channel struct {
 	gorm.Model
-	DiscordId string
+	DiscordID string `gorm:"uniqueIndex"`
 	GuildId   string
 }
 
 type Message struct {
 	gorm.Model
 	Content          string
-	MessageTimestamp time.Time
-	DiscordId        string
+	MessageTimestamp time.Time `gorm:"index"`
+	DiscordID        string    `gorm:"uniqueIndex"`
 	ChannelID        uint
 	Channel          Channel
 	AuthorID         uint
@@ -75,7 +75,7 @@ func PersistChannelToDB(db *gorm.DB, channelId string, guildId string) (*Channel
 	}
 
 	newChannel := &Channel{
-		DiscordId: channelId,
+		DiscordID: channelId,
 		GuildId:   guildId,
 	}
 	result := db.Create(newChannel)
@@ -100,7 +100,7 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 	newMessage := &Message{
 		Content:          msg.Content,
 		MessageTimestamp: msg.Timestamp,
-		DiscordId:        msg.ID,
+		DiscordID:        msg.ID,
 		ChannelID:        channel.ID,
 		AuthorID:         author.ID,
 	}
@@ -108,6 +108,13 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	fmt.Println(channel, author, newMessage)
 	return newMessage, nil
+}
+
+func MarkMessageAsReplayed(db *gorm.DB, message *Message) error {
+	result := db.Model(&message).Update("replayed_at", time.Now())
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
 }

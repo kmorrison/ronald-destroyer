@@ -3,6 +3,7 @@ package ronnyd
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
@@ -18,12 +19,7 @@ const INDEX_COMMAND = "index!"
 func StartBot() error {
 	fmt.Println("Starting bot")
 
-	config := ReadConfig()
-
-	bot, err := discordgo.New("Bot " + config["private-token"].(string))
-	if err != nil {
-		return err
-	}
+	bot, err := initDiscordSession()
 
 	bot.AddHandler(ReadyHandler)
 	bot.AddHandler(MessageHandler)
@@ -40,6 +36,16 @@ func StartBot() error {
 	fmt.Println("Graceful shutdown")
 
 	return nil
+}
+
+func initDiscordSession() (*discordgo.Session, error) {
+	config := ReadConfig()
+
+	bot, err := discordgo.New("Bot " + config["private-token"].(string))
+	if err != nil {
+		return nil, err
+	}
+	return bot, nil
 }
 
 func ReadyHandler(s *discordgo.Session, r *discordgo.Ready) {
@@ -63,7 +69,7 @@ func ScrapeChannelForMessages(s *discordgo.Session, channelID string, maxMessage
 				return err
 			} else {
 				messagesPersisted++
-				anchorMessageId = persistedMessage.DiscordId
+				anchorMessageId = persistedMessage.DiscordID
 			}
 		}
 	}
@@ -93,7 +99,7 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, authorID uint) bool {
 
 	var inBetweenMessage Message
-	db.First(
+	db.Find(
 		&inBetweenMessage,
 		"author_id != ? AND message_timestamp > ? AND message_timestamp < ?",
 		authorID,
@@ -136,18 +142,48 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[
 	return messageSessions
 }
 
-var mu sync.Mutex
+var playbackMutex sync.Mutex
 
-func SendMessagePlayback(authorID string, channelID string) {
+func SelectMessageGroupForPlayback(db *gorm.DB, authorID string, channelID string) []*Message {
+	messageMap := GetMessagesForPlayback(db, authorID, channelID)
+
+	keys := make([]time.Time, 0, len(messageMap))
+	for k := range messageMap {
+		keys = append(keys, k)
+	}
+	randomKey := rand.Intn(len(keys))
+	return messageMap[keys[randomKey]]
+}
+
+func PlaybackMessages(s *discordgo.Session, db *gorm.DB, channelOrUserID string, messages []*Message) {
+	for _, message := range messages {
+		err := MarkMessageAsReplayed(db, message)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		//msg, err := s.ChannelMessageSend(channelOrUserID, message.Content)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println(message)
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func RunPlayback(channelID string, targetID string) {
 	db := ConnectToDB()
 
-	mu.Lock()
-	defer mu.Unlock()
-	messageMap := GetMessagesForPlayback(db, authorID, channelID)
-	for t, messages := range messageMap {
-		for i, message := range messages {
-			fmt.Println(i, t, message.MessageTimestamp, message.Author.Name, message.Content)
-		}
-		fmt.Println("-----")
+	playbackMutex.Lock()
+	defer playbackMutex.Unlock()
+
+	bot, err := initDiscordSession()
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
+	messages := SelectMessageGroupForPlayback(db, targetID, channelID)
+	PlaybackMessages(bot, db, channelID, messages)
 }
