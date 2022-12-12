@@ -85,12 +85,21 @@ func PersistChannelToDB(db *gorm.DB, channelId string, guildId string) (*Channel
 	return newChannel, nil
 }
 
+func IsChannelIndexed(db *gorm.DB, channelId string) uint {
+	var existingChannel Channel
+	db.First(&existingChannel, "discord_id = ?", channelId)
+	return existingChannel.ID
+}
+
 func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
+	channelID := IsChannelIndexed(db, msg.ChannelID)
+	if channelID == 0 {
+		return nil, nil
+	}
 	author, err := PersistAuthorToDB(db, msg.Author)
 	if err != nil {
 		return nil, err
 	}
-	channel, err := PersistChannelToDB(db, msg.ChannelID, msg.GuildID)
 
 	var existingMessage Message
 	db.First(&existingMessage, "discord_id = ?", msg.ID)
@@ -101,7 +110,7 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 		Content:          msg.Content,
 		MessageTimestamp: msg.Timestamp,
 		DiscordID:        msg.ID,
-		ChannelID:        channel.ID,
+		ChannelID:        channelID,
 		AuthorID:         author.ID,
 	}
 	result := db.Create(newMessage)

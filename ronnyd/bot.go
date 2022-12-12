@@ -86,22 +86,28 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	db := ConnectToDB()
+	// NOTE: May not persist message if channel not indexed
 	_, err := PersistMessageToDb(db, m.Message)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	if IsIndexCommand(m.Message) {
+		PersistChannelToDB(db, m.ChannelID, m.GuildID)
 		ScrapeChannelForMessages(s, m.ChannelID, 200, m.ID)
+
+		// TODO: implement "index! more" command
+		// TODO: implement "index! <int>" command
 	}
 }
 
-func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, authorID uint) bool {
+func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, channelID uint, authorID uint) bool {
 
 	var inBetweenMessage Message
 	db.Find(
 		&inBetweenMessage,
-		"author_id != ? AND message_timestamp > ? AND message_timestamp < ?",
+		"channel_id = ? AND author_id != ? AND message_timestamp > ? AND message_timestamp < ?",
+		channelID,
 		authorID,
 		startingTime,
 		endingTime,
@@ -110,7 +116,7 @@ func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.T
 	return inBetweenMessage.ID != 0
 }
 
-func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[time.Time][]*Message {
+func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Message {
 	var messages []*Message
 	db.Joins(
 		"JOIN authors ON authors.id = messages.author_id",
@@ -118,7 +124,10 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[
 		"JOIN channels ON channels.id = messages.channel_id",
 	).Where(
 		"messages.replayed_at = ?", time.Time{},
-	).Where("authors.discord_id = ?", authorID).Where("channels.discord_id = ?", channelID).Order("message_timestamp").Find(&messages)
+	).Where(
+		"authors.discord_id = ?",
+		authorID,
+	).Order("message_timestamp").Find(&messages)
 
 	if len(messages) == 0 {
 		return nil
@@ -132,7 +141,7 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[
 		if message.MessageTimestamp.Sub(startingTime) > 5*time.Minute {
 			startingTime = message.MessageTimestamp
 			messageSessions[startingTime] = make([]*Message, 0)
-		} else if thereExistsMessageFromSomeoneElseInBetween(db, startingTime, message.MessageTimestamp, message.AuthorID) {
+		} else if thereExistsMessageFromSomeoneElseInBetween(db, startingTime, message.MessageTimestamp, message.AuthorID, message.ChannelID) {
 			startingTime = message.MessageTimestamp
 			messageSessions[startingTime] = make([]*Message, 0)
 		}
@@ -144,8 +153,8 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string, channelID string) map[
 
 var playbackMutex sync.Mutex
 
-func SelectMessageGroupForPlayback(db *gorm.DB, authorID string, channelID string) []*Message {
-	messageMap := GetMessagesForPlayback(db, authorID, channelID)
+func SelectMessageGroupForPlayback(db *gorm.DB, authorID string) []*Message {
+	messageMap := GetMessagesForPlayback(db, authorID)
 
 	keys := make([]time.Time, 0, len(messageMap))
 	for k := range messageMap {
@@ -155,19 +164,19 @@ func SelectMessageGroupForPlayback(db *gorm.DB, authorID string, channelID strin
 	return messageMap[keys[randomKey]]
 }
 
-func PlaybackMessages(s *discordgo.Session, db *gorm.DB, channelOrUserID string, messages []*Message) {
+func PlaybackMessages(s *discordgo.Session, db *gorm.DB, messages []*Message) {
 	for _, message := range messages {
 		err := MarkMessageAsReplayed(db, message)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
-		//msg, err := s.ChannelMessageSend(channelOrUserID, message.Content)
+		msg, err := s.ChannelMessageSend(message.Channel.DiscordID, message.Content)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println(message)
+		fmt.Println(msg)
 
 		time.Sleep(1 * time.Second)
 	}
@@ -184,6 +193,7 @@ func RunPlayback(channelID string, targetID string) {
 		fmt.Println(err)
 		return
 	}
-	messages := SelectMessageGroupForPlayback(db, targetID, channelID)
-	PlaybackMessages(bot, db, channelID, messages)
+	// TODO: Make sure we haven't replayed a message from target inside some cooldown period
+	messages := SelectMessageGroupForPlayback(db, targetID)
+	PlaybackMessages(bot, db, messages)
 }
