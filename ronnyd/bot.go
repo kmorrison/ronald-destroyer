@@ -22,6 +22,9 @@ func StartBot() error {
 	fmt.Println("Starting bot")
 
 	bot, err := initDiscordSession()
+	if err != nil {
+		return err
+	}
 
 	bot.AddHandler(ReadyHandler)
 	bot.AddHandler(MessageHandler)
