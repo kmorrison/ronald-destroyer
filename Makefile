@@ -15,4 +15,5 @@ playback: build
 test: build
 	docker exec local-pg2 psql -U postgres -c "DROP DATABASE IF EXISTS test"
 	docker exec local-pg2 psql -U postgres -c "CREATE DATABASE test"
-	./bin/migrate
+	PG_DBNAME=test ./bin/migrate
+	PROJ_ROOT=`pwd`/ PG_DBNAME=test go test -v ./...

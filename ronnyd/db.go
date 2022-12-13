@@ -36,7 +36,6 @@ type Message struct {
 }
 
 func ConnectToDB() *gorm.DB {
-	// TODO: Read db info from secret
 	LoadConfig()
 	dsn := fmt.Sprintf(
 		"host=%s user=postgres password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
@@ -89,7 +88,7 @@ func PersistChannelToDB(db *gorm.DB, channelId string, guildId string) (*Channel
 	return newChannel, nil
 }
 
-func GetHighwaterMessage(db *gorm.DB, channelId string) (*Message) {
+func GetHighwaterMessage(db *gorm.DB, channelId string) *Message {
 	var highwaterMessage Message
 	db.Order("message_timestamp").First(&highwaterMessage, "channel_id = ?", channelId)
 	return &highwaterMessage

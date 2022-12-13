@@ -100,11 +100,13 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if IsIndexCommand(m.Message) {
 		fullCommand := strings.Split(m.Content, " ")
 		switch {
-			case len(fullCommand) == 1: {
+		case len(fullCommand) == 1:
+			{
 				PersistChannelToDB(db, m.ChannelID, m.GuildID)
 				ScrapeChannelForMessages(s, m.ChannelID, DEFAULT_MESSAGES_TO_INDEX, m.ID)
 			}
-			case len(fullCommand) == 2: {
+		case len(fullCommand) == 2:
+			{
 				highWaterMark := m.ID
 				messagesToIndex, err := strconv.Atoi(fullCommand[1])
 				if err != nil {
@@ -126,7 +128,7 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 }
 
-func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, channelID uint, authorID uint) bool {
+func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, authorID uint, channelID uint) bool {
 
 	var inBetweenMessage Message
 	db.Find(
