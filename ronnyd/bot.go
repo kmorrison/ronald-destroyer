@@ -139,8 +139,11 @@ func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.T
 }
 
 func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Message {
+	// XXX: This algorithm looks at all messages from user, and basically does a
+	// query for each one in order to group them. This is pretty inefficient,
+	// probably we should be looking at the 100 most recent unreplayed messages
 	var messages []*Message
-	db.Joins(
+	db.Preload("Author").Preload("Channel").Joins(
 		"JOIN authors ON authors.id = messages.author_id",
 	).Joins(
 		"JOIN channels ON channels.id = messages.channel_id",
@@ -186,16 +189,16 @@ func SelectMessageGroupForPlayback(db *gorm.DB, authorID string) []*Message {
 	return messageMap[keys[randomKey]]
 }
 
-func PlaybackMessages(s *discordgo.Session, db *gorm.DB, messages []*Message) {
+func PlaybackMessages(s Discord, db *gorm.DB, messages []*Message) {
 	for _, message := range messages {
 		err := MarkMessageAsReplayed(db, message)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Failed to mark message as replayed", message.ID)
 			continue
 		}
 		msg, err := s.ChannelMessageSend(message.Channel.DiscordID, message.Content)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error sending message", err)
 			return
 		}
 		fmt.Println(msg)
@@ -212,10 +215,15 @@ func RunPlayback(channelID string, targetID string) {
 
 	bot, err := initDiscordSession()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error starting bot", err)
 		return
 	}
 	// TODO: Make sure we haven't replayed a message from target inside some cooldown period
 	messages := SelectMessageGroupForPlayback(db, targetID)
 	PlaybackMessages(bot, db, messages)
+}
+
+//define discord interface so it can be mocked for testing
+type Discord interface {
+	ChannelMessageSend(channelID string, content string) (*discordgo.Message, error)
 }
