@@ -85,6 +85,12 @@ func PersistChannelToDB(db *gorm.DB, channelId string, guildId string) (*Channel
 	return newChannel, nil
 }
 
+func GetHighwaterMessage(db *gorm.DB, channelId string) (*Message) {
+	var highwaterMessage Message
+	db.Order("message_timestamp").First(&highwaterMessage, "channel_id = ?", channelId)
+	return &highwaterMessage
+}
+
 func IsChannelIndexed(db *gorm.DB, channelId string) uint {
 	var existingChannel Channel
 	db.First(&existingChannel, "discord_id = ?", channelId)

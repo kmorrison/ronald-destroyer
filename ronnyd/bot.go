@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 )
 
 const INDEX_COMMAND = "index!"
+const DEFAULT_MESSAGES_TO_INDEX = 250
 
 func StartBot() error {
 	fmt.Println("Starting bot")
@@ -93,11 +95,31 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	if IsIndexCommand(m.Message) {
-		PersistChannelToDB(db, m.ChannelID, m.GuildID)
-		ScrapeChannelForMessages(s, m.ChannelID, 200, m.ID)
+		fullCommand := strings.Split(m.Content, " ")
+		switch {
+			case len(fullCommand) == 1: {
+				PersistChannelToDB(db, m.ChannelID, m.GuildID)
+				ScrapeChannelForMessages(s, m.ChannelID, DEFAULT_MESSAGES_TO_INDEX, m.ID)
+			}
+			case len(fullCommand) == 2: {
+				highWaterMark := m.ID
+				messagesToIndex, err := strconv.Atoi(fullCommand[1])
+				if err != nil {
+
+					if fullCommand[1] == "more" {
+						highwaterMessage := GetHighwaterMessage(db, m.ChannelID)
+						highWaterMark = highwaterMessage.DiscordID
+						messagesToIndex = DEFAULT_MESSAGES_TO_INDEX
+					} else {
+						return
+					}
+				}
+				PersistChannelToDB(db, m.ChannelID, m.GuildID)
+				ScrapeChannelForMessages(s, m.ChannelID, messagesToIndex, highWaterMark)
+			}
+		}
 
 		// TODO: implement "index! more" command
-		// TODO: implement "index! <int>" command
 	}
 }
 
