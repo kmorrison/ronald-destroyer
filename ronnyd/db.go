@@ -2,6 +2,7 @@ package ronnyd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -36,10 +37,13 @@ type Message struct {
 
 func ConnectToDB() *gorm.DB {
 	// TODO: Read db info from secret
-	config := ReadConfig()
+	LoadConfig()
 	dsn := fmt.Sprintf(
-		"host=localhost user=postgres password=%s dbname=ronny port=32768 sslmode=disable TimeZone=UTC",
-		config["postgres-password"],
+		"host=%s user=postgres password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
+		os.Getenv("PG_HOST"),
+		os.Getenv("PG_PASSWORD"),
+		os.Getenv("PG_DBNAME"),
+		"32768",
 	)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {

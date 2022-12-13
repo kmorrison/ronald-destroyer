@@ -3,6 +3,8 @@ package ronnyd
 import (
 	"encoding/json"
 	"io/ioutil" //it will be used to help us read our config.json file.
+
+	"github.com/joho/godotenv"
 )
 
 func ReadConfig() map[string]interface{} {
@@ -18,4 +20,9 @@ func ReadConfig() map[string]interface{} {
 		panic("Unable to parse json in config file")
 	}
 	return config
+}
+
+func LoadConfig() {
+	godotenv.Load()
+	godotenv.Load(".env.public")
 }

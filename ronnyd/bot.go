@@ -41,9 +41,9 @@ func StartBot() error {
 }
 
 func initDiscordSession() (*discordgo.Session, error) {
-	config := ReadConfig()
+	LoadConfig()
 
-	bot, err := discordgo.New("Bot " + config["private-token"].(string))
+	bot, err := discordgo.New("Bot " + os.Getenv("DISCORD_PRIVATE_TOKEN"))
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +79,8 @@ func ScrapeChannelForMessages(s *discordgo.Session, channelID string, maxMessage
 }
 
 func IsIndexCommand(m *discordgo.Message) bool {
-	config := ReadConfig()
-	return (strings.HasPrefix(m.Content, INDEX_COMMAND) && m.Author.ID == config["admin-discord-id"].(string))
+	LoadConfig()
+	return (strings.HasPrefix(m.Content, INDEX_COMMAND) && m.Author.ID == os.Getenv("ADMIN_DISCORD_ID"))
 }
 
 func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
