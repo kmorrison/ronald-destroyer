@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"testing"
 	"time"
-	"os"
 
 	"ronald-destroyer/ronnyd"
 )
@@ -30,9 +30,9 @@ func LoadDevFixtures(m *testing.M) {
 	newAuthorIDMapping := make(map[float64]uint)
 	for _, author := range authorPayload {
 		insertedAuthor := ronnyd.Author{
-			DiscordID: author["DiscordID"].(string),
-			Name:     author["Name"].(string),
-			Discriminator:     author["Discriminator"].(string),
+			DiscordID:     author["DiscordID"].(string),
+			Name:          author["Name"].(string),
+			Discriminator: author["Discriminator"].(string),
 		}
 		db.Create(&insertedAuthor)
 		newAuthorIDMapping[author["ID"].(float64)] = insertedAuthor.ID
@@ -49,7 +49,7 @@ func LoadDevFixtures(m *testing.M) {
 	for _, channel := range channelPayload {
 		insertedChannel := ronnyd.Channel{
 			DiscordID: channel["DiscordID"].(string),
-			GuildId:     channel["GuildId"].(string),
+			GuildId:   channel["GuildId"].(string),
 		}
 		db.Create(&insertedChannel)
 		newChannelIDMapping[channel["ID"].(float64)] = insertedChannel.ID
@@ -76,11 +76,11 @@ func LoadDevFixtures(m *testing.M) {
 			panic(err)
 		}
 		insertedMessage := ronnyd.Message{
-			DiscordID: message["DiscordID"].(string),
-			Content: message["Content"].(string),
-			ReplayedAt: replayedAt,
-			AuthorID: newAuthorIDMapping[message["AuthorID"].(float64)],
-			ChannelID: newChannelIDMapping[message["ChannelID"].(float64)],
+			DiscordID:        message["DiscordID"].(string),
+			Content:          message["Content"].(string),
+			ReplayedAt:       replayedAt,
+			AuthorID:         newAuthorIDMapping[message["AuthorID"].(float64)],
+			ChannelID:        newChannelIDMapping[message["ChannelID"].(float64)],
 			MessageTimestamp: messageTimestamp,
 		}
 		db.Create(&insertedMessage)

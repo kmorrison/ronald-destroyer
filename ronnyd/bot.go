@@ -144,45 +144,6 @@ func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.T
 	return inBetweenMessage.ID != 0
 }
 
-func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Message {
-	// XXX: This algorithm looks at all messages from user, and basically does a
-	// query for each one in order to group them. This is pretty inefficient,
-	// probably we should be looking at the 100 most recent unreplayed messages
-	var messages []*Message
-	db.Preload("Author").Preload("Channel").Joins(
-		"JOIN authors ON authors.id = messages.author_id",
-	).Joins(
-		"JOIN channels ON channels.id = messages.channel_id",
-	).Where(
-		"messages.replayed_at = ?", time.Time{},
-	).Where(
-		"authors.discord_id = ?",
-		authorID,
-	).Order("message_timestamp").Find(&messages)
-
-	if len(messages) == 0 {
-		fmt.Println("no messages found", authorID)
-		return nil
-	}
-
-	var messageSessions map[time.Time][]*Message
-	var startingTime time.Time
-	messageSessions = make(map[time.Time][]*Message)
-	for _, message := range messages {
-		// decide if we should group into a new session
-		if message.MessageTimestamp.Sub(startingTime) > 5*time.Minute {
-			startingTime = message.MessageTimestamp
-			messageSessions[startingTime] = make([]*Message, 0)
-		} else if thereExistsMessageFromSomeoneElseInBetween(db, startingTime, message.MessageTimestamp, message.AuthorID, message.ChannelID) {
-			startingTime = message.MessageTimestamp
-			messageSessions[startingTime] = make([]*Message, 0)
-		}
-
-		messageSessions[startingTime] = append(messageSessions[startingTime], message)
-	}
-	return messageSessions
-}
-
 var playbackMutex sync.Mutex
 
 func SelectMessageGroupForPlayback(db *gorm.DB, authorID string) []*Message {
