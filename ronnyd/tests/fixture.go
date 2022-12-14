@@ -67,6 +67,10 @@ func LoadDevFixtures(m *testing.M) {
 		if err != nil {
 			panic(err)
 		}
+		if replayedAt.Year() < 1970 {
+			// Hack because serializing then deserializing a time.Time{} gives you not time.Time{}
+			replayedAt = time.Time{}
+		}
 		messageTimestamp, err := time.Parse(time.RFC3339, message["MessageTimestamp"].(string))
 		if err != nil {
 			panic(err)

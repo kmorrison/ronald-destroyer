@@ -7,8 +7,13 @@ import (
 
 func main() {
 	ronnyd.LoadConfig()
+	d, err := ronnyd.InitDiscordSession()
+	if err != nil {
+		panic(err)
+	}
+
 	ronnyd.RunPlayback(
-		"982055964230422608",
+		d,
 		os.Getenv("ADMIN_DISCORD_ID"),
 	)
 }

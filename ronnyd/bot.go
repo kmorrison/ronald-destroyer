@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +22,7 @@ const DEFAULT_MESSAGES_TO_INDEX = 250
 func StartBot() error {
 	fmt.Println("Starting bot")
 
-	bot, err := initDiscordSession()
+	bot, err := InitDiscordSession()
 	if err != nil {
 		return err
 	}
@@ -43,7 +44,7 @@ func StartBot() error {
 	return nil
 }
 
-func initDiscordSession() (*discordgo.Session, error) {
+func InitDiscordSession() (*discordgo.Session, error) {
 	LoadConfig()
 
 	bot, err := discordgo.New("Bot " + os.Getenv("DISCORD_PRIVATE_TOKEN"))
@@ -160,6 +161,7 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Messa
 	).Order("message_timestamp").Find(&messages)
 
 	if len(messages) == 0 {
+		fmt.Println("no messages found", authorID)
 		return nil
 	}
 
@@ -190,42 +192,46 @@ func SelectMessageGroupForPlayback(db *gorm.DB, authorID string) []*Message {
 	for k := range messageMap {
 		keys = append(keys, k)
 	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
 	randomKey := rand.Intn(len(keys))
 	return messageMap[keys[randomKey]]
 }
 
-func PlaybackMessages(s Discord, db *gorm.DB, messages []*Message) {
+func PlaybackMessages(s Discord, db *gorm.DB, messages []*Message) []*Message {
+	var messagesReplayed []*Message
 	for _, message := range messages {
 		err := MarkMessageAsReplayed(db, message)
 		if err != nil {
 			fmt.Println("Failed to mark message as replayed", message.ID)
 			continue
 		}
-		msg, err := s.ChannelMessageSend(message.Channel.DiscordID, message.Content)
+
+		_, err = s.ChannelMessageSend(message.Channel.DiscordID, message.Content)
 		if err != nil {
 			fmt.Println("Error sending message", err)
-			return
+			return messagesReplayed
 		}
-		fmt.Println(msg)
+		messagesReplayed = append(messagesReplayed, message)
 
-		time.Sleep(1 * time.Second)
+		if os.Getenv("ENV") != "test" {
+			time.Sleep(1 * time.Second)
+		}
 	}
+	return messagesReplayed
 }
 
-func RunPlayback(channelID string, targetID string) {
+func RunPlayback(d Discord, targetID string) []*Message {
 	db := ConnectToDB()
 
 	playbackMutex.Lock()
 	defer playbackMutex.Unlock()
 
-	bot, err := initDiscordSession()
-	if err != nil {
-		fmt.Println("Error starting bot", err)
-		return
-	}
 	// TODO: Make sure we haven't replayed a message from target inside some cooldown period
 	messages := SelectMessageGroupForPlayback(db, targetID)
-	PlaybackMessages(bot, db, messages)
+	messagesReplayed := PlaybackMessages(d, db, messages)
+	return messagesReplayed
 }
 
 //define discord interface so it can be mocked for testing
