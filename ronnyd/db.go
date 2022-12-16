@@ -168,6 +168,22 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Messa
 	return messageSessions
 }
 
+func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.Time, endingTime time.Time, authorID uint, channelID uint) bool {
+
+	var inBetweenMessage Message
+	db.Find(
+		&inBetweenMessage,
+		"channel_id = ? AND author_id != ? AND message_timestamp > ? AND message_timestamp < ?",
+		channelID,
+		authorID,
+		startingTime,
+		endingTime,
+	)
+
+	return inBetweenMessage.ID != 0
+}
+
+
 func MarkMessageAsReplayed(db *gorm.DB, message *Message) error {
 	result := db.Model(&message).Update("replayed_at", time.Now())
 	if result.Error != nil {
