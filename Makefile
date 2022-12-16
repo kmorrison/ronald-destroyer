@@ -1,4 +1,4 @@
-.PHONY: build bot playback
+.PHONY: build bot playback test
 
 build:
 	go build -o bin/bot ./cmd/
