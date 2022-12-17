@@ -111,7 +111,7 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 	}
 
 	var existingMessage Message
-	db.First(&existingMessage, "discord_id = ?", msg.ID)
+	db.Limit(1).Find(&existingMessage, "discord_id = ?", msg.ID)
 	if existingMessage.ID != 0 {
 		return &existingMessage, nil
 	}
@@ -154,6 +154,9 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Messa
 	var startingTime time.Time
 	messageSessions = make(map[time.Time][]*Message)
 	for _, message := range messages {
+		if IsIndexCommand(message.Content, message.Author.DiscordID) {
+			continue
+		}
 		// decide if we should group into a new session
 		if message.MessageTimestamp.Sub(startingTime) > 5*time.Minute {
 			startingTime = message.MessageTimestamp
@@ -182,7 +185,6 @@ func thereExistsMessageFromSomeoneElseInBetween(db *gorm.DB, startingTime time.T
 
 	return inBetweenMessage.ID != 0
 }
-
 
 func MarkMessageAsReplayed(db *gorm.DB, message *Message) error {
 	result := db.Model(&message).Update("replayed_at", time.Now())

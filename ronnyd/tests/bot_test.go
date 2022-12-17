@@ -5,7 +5,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"math/rand"
 	"os"
 	"ronald-destroyer/ronnyd"
 	"testing"
@@ -28,6 +27,40 @@ func TestDatabaseIsNotEmpty(t *testing.T) {
 	}
 }
 
+func TestInsertSameMessageTwiceResultsInOneMessage(t *testing.T) {
+	db := ronnyd.ConnectToDB()
+	var indexedChannel ronnyd.Channel
+	db.First(&indexedChannel)
+	var adminAuthor ronnyd.Author
+	db.First(&adminAuthor, "discord_id = ?", os.Getenv("ADMIN_DISCORD_ID"))
+
+	discordMessage1 := &discordgo.Message{
+		Content:   "index! more",
+		ChannelID: fmt.Sprint(indexedChannel.DiscordID),
+		GuildID:   fmt.Sprint(indexedChannel.GuildId),
+		Timestamp: time.Now(),
+		ID:        "12345",
+		Author: &discordgo.User{
+			ID:            adminAuthor.DiscordID,
+			Username:      adminAuthor.Name,
+			Discriminator: adminAuthor.Discriminator,
+		},
+	}
+
+	persistedMessage, err := ronnyd.PersistMessageToDb(db, discordMessage1)
+	if err != nil {
+		t.Fail()
+	}
+	assert.NotNil(t, persistedMessage.ID)
+	assert.Equal(t, persistedMessage.ReplayedAt, time.Time{})
+
+	persistedMessage2, err := ronnyd.PersistMessageToDb(db, discordMessage1)
+	assert.Nil(t, err)
+	assert.NotNil(t, persistedMessage2)
+	assert.Equal(t, persistedMessage.ID, persistedMessage2.ID)
+	db.Delete(&ronnyd.Message{}, "discord_id = ?", discordMessage1.ID)
+}
+
 type MockedDiscord struct {
 	mock.Mock
 }
@@ -43,18 +76,11 @@ func (m *MockedDiscord) ChannelMessageSend(channelID string, content string) (*d
 }
 
 func TestSendPlayback(t *testing.T) {
-	rand.Seed(1234)
 	db := ronnyd.ConnectToDB()
-	var message1, message2 ronnyd.Message
+	var message1 ronnyd.Message
 	// we just happen to know which random message we're gonna select for playback
-	db.Preload("Channel").Preload("Author").First(&message1, "id = ?", 101)
+	db.Preload("Channel").Preload("Author").First(&message1, "discord_id = ?", "1053070231075029074")
 	discordMessage1 := &discordgo.Message{
-		Content:   message1.Content,
-		ChannelID: fmt.Sprint(message1.ChannelID),
-		GuildID:   "1",
-	}
-	db.Preload("Channel").Preload("Author").First(&message2, "id = ?", 100)
-	discordMessage2 := &discordgo.Message{
 		Content:   message1.Content,
 		ChannelID: fmt.Sprint(message1.ChannelID),
 		GuildID:   "1",
@@ -62,10 +88,60 @@ func TestSendPlayback(t *testing.T) {
 
 	discordMock := new(MockedDiscord)
 	discordMock.On("ChannelMessageSend", message1.Channel.DiscordID, message1.Content).Return(discordMessage1, nil)
-	discordMock.On("ChannelMessageSend", message2.Channel.DiscordID, message2.Content).Return(discordMessage2, nil)
 	messagesReplayed := ronnyd.RunPlayback(discordMock, os.Getenv("ADMIN_DISCORD_ID"))
-	assert.Len(t, messagesReplayed, 2)
+	assert.Len(t, messagesReplayed, 1)
 	assert.Less(t, time.Since(messagesReplayed[0].ReplayedAt), 5*time.Second)
-	assert.Less(t, time.Since(messagesReplayed[1].ReplayedAt), 5*time.Second)
+
+	var message2 ronnyd.Message
+	db.First(&message2, "discord_id = ?", message1.DiscordID)
+	assert.Less(t, time.Since(message2.ReplayedAt), 5*time.Second)
+	message2.ReplayedAt = time.Time{}
+	db.Save(&message2)
 	discordMock.AssertExpectations(t)
 }
+
+func TestWontReplayIndexCommands(t *testing.T) {
+	db := ronnyd.ConnectToDB()
+	var indexedChannel ronnyd.Channel
+	db.First(&indexedChannel)
+	var adminAuthor ronnyd.Author
+	db.First(&adminAuthor, "discord_id = ?", os.Getenv("ADMIN_DISCORD_ID"))
+
+	discordMessage1 := &discordgo.Message{
+		Content:   "index! more",
+		ChannelID: fmt.Sprint(indexedChannel.DiscordID),
+		GuildID:   fmt.Sprint(indexedChannel.GuildId),
+		ID:        "123456",
+		Timestamp: time.Now(),
+		Author: &discordgo.User{
+			ID:            adminAuthor.DiscordID,
+			Username:      adminAuthor.Name,
+			Discriminator: adminAuthor.Discriminator,
+		},
+	}
+
+	_, err := ronnyd.PersistMessageToDb(db, discordMessage1)
+	if err != nil {
+		t.Fail()
+	}
+
+	var message1 ronnyd.Message
+	// we just happen to know which random message we're gonna select for playback
+	db.Preload("Channel").Preload("Author").First(&message1, "discord_id = ?", "1053070231075029074")
+
+	discordMock := new(MockedDiscord)
+	discordMock.On("ChannelMessageSend", message1.Channel.DiscordID, message1.Content).Return(discordgo.Message{}, nil)
+
+	messagesReplayed := ronnyd.RunPlayback(discordMock, os.Getenv("ADMIN_DISCORD_ID"))
+	assert.Len(t, messagesReplayed, 1)
+	assert.Less(t, time.Since(messagesReplayed[0].ReplayedAt), 5*time.Second)
+
+	var message2 ronnyd.Message
+	db.First(&message2, "discord_id = ?", message1.DiscordID)
+	assert.Less(t, time.Since(message2.ReplayedAt), 5*time.Second)
+	message2.ReplayedAt = time.Time{}
+	db.Save(&message2)
+	discordMock.AssertExpectations(t)
+}
+
+// TODO: Send multiple messages and assert they get batched correctly

@@ -77,9 +77,9 @@ func ScrapeChannelForMessages(s *discordgo.Session, channelID string, maxMessage
 	return nil
 }
 
-func IsIndexCommand(m *discordgo.Message) bool {
+func IsIndexCommand(content string, authorID string) bool {
 	LoadConfig()
-	return (strings.HasPrefix(m.Content, INDEX_COMMAND) && m.Author.ID == os.Getenv("ADMIN_DISCORD_ID"))
+	return (strings.HasPrefix(content, INDEX_COMMAND) && authorID == os.Getenv("ADMIN_DISCORD_ID"))
 }
 
 func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -93,7 +93,7 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		fmt.Println(err)
 		return
 	}
-	if IsIndexCommand(m.Message) {
+	if IsIndexCommand(m.Message.Content, m.Author.ID) {
 		fullCommand := strings.Split(m.Content, " ")
 		switch {
 		case len(fullCommand) == 1:
@@ -123,7 +123,6 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// TODO: implement "index! more" command
 	}
 }
-
 
 //define discord interface so it can be mocked for testing
 type Discord interface {

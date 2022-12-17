@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		panic("Unable to serialize authors as json")
 	}
-	ioutil.WriteFile("testuitl/fixtures/authors.json", jsonAuthors, 0644)
+	ioutil.WriteFile("testutil/fixtures/authors.json", jsonAuthors, 0644)
 
 	var channels []*ronnyd.Channel
 	db.Table("channels").Find(&channels)
@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		panic("Unable to serialize channels as json")
 	}
-	ioutil.WriteFile("testuitl/fixtures/channels.json", jsonChannels, 0644)
+	ioutil.WriteFile("testutil/fixtures/channels.json", jsonChannels, 0644)
 
 	var messages []*ronnyd.Message
 	db.Table("messages").Find(&messages)
@@ -32,5 +32,5 @@ func main() {
 	if err != nil {
 		panic("Unable to serialize messages as json")
 	}
-	ioutil.WriteFile("testuitl/fixtures/messages.json", jsonMessages, 0644)
+	ioutil.WriteFile("testutil/fixtures/messages.json", jsonMessages, 0644)
 }

@@ -9,8 +9,8 @@ import (
 func main() {
 	ronnyd.LoadConfig()
 	playbackTarget := flag.String(
-		"target", 
-		os.Getenv("ADMIN_DISCORD_ID"), 
+		"target",
+		os.Getenv("ADMIN_DISCORD_ID"),
 		"Target user (discord_id) to playback messages for",
 	)
 	flag.Parse()

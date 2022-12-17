@@ -1,7 +1,7 @@
 package ronnyd
+
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -22,8 +22,8 @@ func SelectMessageGroupForPlayback(db *gorm.DB, authorID string) []*Message {
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].Before(keys[j])
 	})
-	randomKey := rand.Intn(len(keys))
-	return messageMap[keys[randomKey]]
+	lastKey := len(keys) - 1
+	return messageMap[keys[lastKey]]
 }
 
 func PlaybackMessages(s Discord, db *gorm.DB, messages []*Message) []*Message {
