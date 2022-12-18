@@ -2,12 +2,14 @@ package ronnyd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Author struct {
@@ -27,12 +29,13 @@ type Message struct {
 	gorm.Model
 	Content          string
 	MessageTimestamp time.Time `gorm:"index"`
-	DiscordID        string    `gorm:"uniqueIndex"`
+	DiscordID        string    `gorm:"index"`
 	ChannelID        uint
 	Channel          Channel
 	AuthorID         uint
 	Author           Author
 	ReplayedAt       time.Time
+	EditedAt 	     time.Time  `gorm:"index"`
 }
 
 func ConnectToDB() *gorm.DB {
@@ -53,7 +56,7 @@ func ConnectToDB() *gorm.DB {
 
 func PersistAuthorToDB(db *gorm.DB, author *discordgo.User) (*Author, error) {
 	var existingAuthor Author
-	db.First(&existingAuthor, "discord_id = ?", author.ID)
+	db.Limit(1).Find(&existingAuthor, "discord_id = ?", author.ID)
 	if existingAuthor.ID != 0 {
 		return &existingAuthor, nil
 	}
@@ -72,7 +75,7 @@ func PersistAuthorToDB(db *gorm.DB, author *discordgo.User) (*Author, error) {
 
 func PersistChannelToDB(db *gorm.DB, channelId string, guildId string) (*Channel, error) {
 	var existingChannel Channel
-	db.First(&existingChannel, "discord_id = ?", channelId)
+	db.Limit(1).Find(&existingChannel, "discord_id = ?", channelId)
 	if existingChannel.ID != 0 {
 		return &existingChannel, nil
 	}
@@ -101,6 +104,7 @@ func IsChannelIndexed(db *gorm.DB, channelId string) uint {
 }
 
 func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
+	log.Default().Println("Received message: ", msg.Content, " from ", msg.Author.Username, " in ", msg.ChannelID)
 	channelID := IsChannelIndexed(db, msg.ChannelID)
 	if channelID == 0 {
 		return nil, nil
@@ -113,6 +117,7 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 	var existingMessage Message
 	db.Limit(1).Find(&existingMessage, "discord_id = ?", msg.ID)
 	if existingMessage.ID != 0 {
+		log.Default().Println("Ignoring existing message for persist", existingMessage.ID, msg.ID)
 		return &existingMessage, nil
 	}
 	newMessage := &Message{
@@ -123,10 +128,54 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 		AuthorID:         author.ID,
 	}
 	result := db.Create(newMessage)
+	log.Default().Println("Created new message", newMessage.ID, msg.ID)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	return newMessage, nil
+}
+
+func UpdateMessage(db *gorm.DB, msg *discordgo.Message) error {
+	tx := db.Begin()
+
+	var existingMessage Message
+	err := db.Clauses(
+		clause.Locking{Strength: "UPDATE"},
+	).Last(
+		&existingMessage, 
+		"discord_id = ?", 
+		msg.ID,
+	)
+	if err.Error != nil {
+		log.Default().Println("Error updating message", err.Error)
+		tx.Rollback()
+		return err.Error
+	}
+
+	newMessage := &Message{
+		Content:          msg.Content,
+		MessageTimestamp: *msg.EditedTimestamp,
+		DiscordID:        msg.ID,
+		ChannelID:        existingMessage.ChannelID,
+		AuthorID:         existingMessage.AuthorID,
+	}
+	result := tx.Save(newMessage)
+	existingMessage.EditedAt = *msg.EditedTimestamp
+	tx.Save(&existingMessage)
+	if result.Error != nil {
+		log.Default().Println("Error updating message", result.Error)
+		tx.Rollback()
+		return result.Error
+	}
+	existingMessage.EditedAt = *msg.EditedTimestamp
+	result = tx.Save(&existingMessage)
+	if result.Error != nil {
+		log.Default().Println("Error updating message", result.Error)
+		tx.Rollback()
+		return result.Error
+	}
+	tx.Commit()
+	return nil
 }
 
 func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Message {
@@ -140,6 +189,8 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Messa
 		"JOIN channels ON channels.id = messages.channel_id",
 	).Where(
 		"messages.replayed_at = ?", time.Time{},
+	).Where(
+		"messages.edited_at = ?", time.Time{},
 	).Where(
 		"authors.discord_id = ?",
 		authorID,

@@ -82,6 +82,14 @@ func IsIndexCommand(content string, authorID string) bool {
 	return (strings.HasPrefix(content, INDEX_COMMAND) && authorID == os.Getenv("ADMIN_DISCORD_ID"))
 }
 
+func EditHandler(s *discordgo.Session, m *discordgo.MessageUpdate) {
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
+	db := ConnectToDB()
+	UpdateMessage(db, m.Message)
+}
+
 func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
