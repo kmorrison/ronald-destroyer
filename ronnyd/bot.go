@@ -2,6 +2,7 @@ package ronnyd
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"os/signal"
@@ -87,7 +88,11 @@ func EditHandler(s *discordgo.Session, m *discordgo.MessageUpdate) {
 		return
 	}
 	db := ConnectToDB()
-	UpdateMessage(db, m.Message)
+	err := UpdateMessage(db, m.Message)
+	if err != nil {
+		log.Default().Println(err)
+		return
+	}
 }
 
 func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -127,8 +132,6 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 				ScrapeChannelForMessages(s, m.ChannelID, messagesToIndex, highWaterMark)
 			}
 		}
-
-		// TODO: implement "index! more" command
 	}
 }
 

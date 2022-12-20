@@ -160,8 +160,6 @@ func UpdateMessage(db *gorm.DB, msg *discordgo.Message) error {
 		AuthorID:         existingMessage.AuthorID,
 	}
 	result := tx.Save(newMessage)
-	existingMessage.EditedAt = *msg.EditedTimestamp
-	tx.Save(&existingMessage)
 	if result.Error != nil {
 		log.Default().Println("Error updating message", result.Error)
 		tx.Rollback()

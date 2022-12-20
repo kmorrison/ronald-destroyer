@@ -144,4 +144,51 @@ func TestWontReplayIndexCommands(t *testing.T) {
 	discordMock.AssertExpectations(t)
 }
 
+func TestUpdateMessage(t *testing.T) {
+	db := ronnyd.ConnectToDB()
+	var indexedChannel ronnyd.Channel
+	db.First(&indexedChannel)
+	var adminAuthor ronnyd.Author
+	db.First(&adminAuthor, "discord_id = ?", os.Getenv("ADMIN_DISCORD_ID"))
+
+	now := time.Now()
+	discordMessage1 := &discordgo.Message{
+		Content:   "hi hi hi",
+		ChannelID: fmt.Sprint(indexedChannel.DiscordID),
+		GuildID:   fmt.Sprint(indexedChannel.GuildId),
+		Timestamp: time.Now(),
+		ID:        "12345",
+		Author: &discordgo.User{
+			ID:            adminAuthor.DiscordID,
+			Username:      adminAuthor.Name,
+			Discriminator: adminAuthor.Discriminator,
+		},
+		EditedTimestamp: &now,
+	}
+
+	persistedMessage, err := ronnyd.PersistMessageToDb(db, discordMessage1)
+	if err != nil {
+		t.Fail()
+	}
+	assert.NotNil(t, persistedMessage.ID)
+	assert.Equal(t, persistedMessage.ReplayedAt, time.Time{})
+	assert.Equal(t, persistedMessage.Content, "hi hi hi")
+
+	discordMessage1.Content = "hi hi hi hi"
+	discordMessage1.Timestamp = time.Now()
+	err = ronnyd.UpdateMessage(db, discordMessage1)
+	if err != nil {
+		fmt.Println(err)
+		t.Fail()
+	}
+
+	var message1 ronnyd.Message
+	db.Last(&message1, "discord_id = ?", discordMessage1.ID)
+
+	assert.Equal(t, message1.Content, "hi hi hi hi")
+
+	db.First(&persistedMessage, "discord_id = ?", discordMessage1.ID)
+	assert.Equal(t, persistedMessage.Content, "hi hi hi")
+	assert.True(t, persistedMessage.EditedAt.Equal(now))
+}
 // TODO: Send multiple messages and assert they get batched correctly
