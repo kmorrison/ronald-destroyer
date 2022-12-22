@@ -25,6 +25,7 @@ func StartBot() error {
 
 	bot.AddHandler(ReadyHandler)
 	bot.AddHandler(MessageHandler)
+	bot.AddHandler(EditHandler)
 	err = bot.Open()
 	if err != nil {
 		return err
