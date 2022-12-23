@@ -85,7 +85,16 @@ func IsIndexCommand(content string, authorID string) bool {
 }
 
 func EditHandler(s *discordgo.Session, m *discordgo.MessageUpdate) {
-	log.Default().Println(11111, m.Author, s.State.User, m.Message)
+	log.Default().Println(
+		11111, 
+		s.State.User, 
+		m.Message, 
+		m.Message.Author.ID, 
+		m.Message.ChannelID, 
+		m.Message.Content, 
+		m.Message.Timestamp, 
+		m.Message.EditedTimestamp,
+	)
 	if m.Message.Author.ID == s.State.User.ID {
 		return
 	}
