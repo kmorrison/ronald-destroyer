@@ -86,15 +86,19 @@ func IsIndexCommand(content string, authorID string) bool {
 
 func EditHandler(s *discordgo.Session, m *discordgo.MessageUpdate) {
 	log.Default().Println(
-		11111, 
-		s.State.User, 
-		m.Message, 
-		m.Message.Author.ID, 
+		"Message Edit", 
+		m.Message.ID,
+		m.Message.Author, 
 		m.Message.ChannelID, 
 		m.Message.Content, 
 		m.Message.Timestamp, 
 		m.Message.EditedTimestamp,
 	)
+	if m.Message.Author == nil {
+		// Sometimes we get blank updates from no author, suspect it has
+		// something to do with discord media embeds
+		return
+	}
 	if m.Message.Author.ID == s.State.User.ID {
 		return
 	}

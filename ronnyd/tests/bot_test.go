@@ -39,7 +39,7 @@ func TestInsertSameMessageTwiceResultsInOneMessage(t *testing.T) {
 		ChannelID: fmt.Sprint(indexedChannel.DiscordID),
 		GuildID:   fmt.Sprint(indexedChannel.GuildId),
 		Timestamp: time.Now(),
-		ID:        "12345",
+		ID:        "1234",
 		Author: &discordgo.User{
 			ID:            adminAuthor.DiscordID,
 			Username:      adminAuthor.Name,
@@ -192,3 +192,45 @@ func TestUpdateMessage(t *testing.T) {
 	assert.True(t, persistedMessage.EditedAt.Equal(now))
 }
 // TODO: Send multiple messages and assert they get batched correctly
+
+func TestEditedMessageNoEditTimestamp(t *testing.T){
+	db := ronnyd.ConnectToDB()
+	var indexedChannel ronnyd.Channel
+	db.First(&indexedChannel)
+	var adminAuthor ronnyd.Author
+	db.First(&adminAuthor, "discord_id = ?", os.Getenv("ADMIN_DISCORD_ID"))
+
+	now := time.Now()
+	discordMessage1 := &discordgo.Message{
+		Content:   "hi hi hi",
+		ChannelID: fmt.Sprint(indexedChannel.DiscordID),
+		GuildID:   fmt.Sprint(indexedChannel.GuildId),
+		Timestamp: now,
+		ID:        "1234567",
+		Author: &discordgo.User{
+			ID:            adminAuthor.DiscordID,
+			Username:      adminAuthor.Name,
+			Discriminator: adminAuthor.Discriminator,
+		},
+	}
+
+	_, err := ronnyd.PersistMessageToDb(db, discordMessage1)
+	if err != nil {
+		t.Fail()
+	}
+
+	discordMessage1.Content = "hi hi hi hi"
+	discordMessage1.Timestamp = time.Now()
+	discordMessage1.EditedTimestamp = nil
+	err = ronnyd.UpdateMessage(db, discordMessage1)
+	if err == nil {
+		fmt.Println("Expected error when updating message without edited timestamp")
+		t.Fail()
+	}
+
+	var message1 ronnyd.Message
+	db.Last(&message1, "discord_id = ?", discordMessage1.ID)
+
+	assert.Equal(t, message1.Content, "hi hi hi")
+	assert.LessOrEqual(t, message1.EditedAt, time.Time{})
+}

@@ -1,6 +1,7 @@
 package ronnyd
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -128,10 +129,10 @@ func PersistMessageToDb(db *gorm.DB, msg *discordgo.Message) (*Message, error) {
 		AuthorID:         author.ID,
 	}
 	result := db.Create(newMessage)
-	log.Default().Println("Created new message", newMessage.ID, msg.ID)
 	if result.Error != nil {
 		return nil, result.Error
 	}
+	log.Default().Println("Created new message", newMessage.ID, msg.ID)
 	return newMessage, nil
 }
 
@@ -151,10 +152,16 @@ func UpdateMessage(db *gorm.DB, msg *discordgo.Message) error {
 		tx.Rollback()
 		return err.Error
 	}
+	var editedTimestamp time.Time
+	if msg.EditedTimestamp != nil {
+		editedTimestamp = *msg.EditedTimestamp
+	} else {
+		return errors.New("no edited timestamp")
+	}
 
 	newMessage := &Message{
 		Content:          msg.Content,
-		MessageTimestamp: *msg.EditedTimestamp,
+		MessageTimestamp: editedTimestamp,
 		DiscordID:        msg.ID,
 		ChannelID:        existingMessage.ChannelID,
 		AuthorID:         existingMessage.AuthorID,
@@ -188,7 +195,7 @@ func GetMessagesForPlayback(db *gorm.DB, authorID string) map[time.Time][]*Messa
 	).Where(
 		"messages.replayed_at = ?", time.Time{},
 	).Where(
-		"messages.edited_at = ?", time.Time{},
+		"messages.edited_at <= ?", time.Time{},
 	).Where(
 		"authors.discord_id = ?",
 		authorID,
